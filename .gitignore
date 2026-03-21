@@ -1,0 +1,7 @@
+bin/
+coverage.out
+coverage.html
+*.db
+*.log
+*.lock
+dist/
