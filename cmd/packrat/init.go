@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/harish/packrat/internal/config"
@@ -36,6 +37,35 @@ func runInit(cmd *cobra.Command, args []string) error {
 
 	cfg := config.DefaultConfig()
 
+	// Prerequisite: Check for rclone before anything else
+	fmt.Println("  Checking dependencies...")
+	rcloneVer, err := storage.CheckRcloneInstalled()
+	if err != nil {
+		fmt.Println("  > ✗ rclone not found.")
+		fmt.Print("  > Install rclone automatically? [Y/n] ")
+		answer, _ := reader.ReadString('\n')
+		answer = strings.TrimSpace(strings.ToLower(answer))
+
+		if answer == "n" || answer == "no" {
+			fmt.Println("  > Please install rclone from https://rclone.org")
+			fmt.Println("  > After installing, run: rclone config")
+			fmt.Println("  > Then re-run: packrat init")
+			return err
+		}
+
+		binPath, installErr := storage.InstallRclone(os.Stdout)
+		if installErr != nil {
+			fmt.Println("  > ✗ Automatic install failed.")
+			fmt.Println("  > Please install manually from https://rclone.org")
+			fmt.Println("  > Then re-run: packrat init")
+			return installErr
+		}
+		storage.RcloneBinary = binPath
+	} else {
+		fmt.Printf("  > ✓ rclone found (%s)\n", rcloneVer)
+	}
+	fmt.Println()
+
 	// Step 1: Machine Name
 	fmt.Printf("  Step 1/5: Machine Name\n")
 	fmt.Printf("  > What should we call this machine? [%s] ", cfg.General.MachineName)
@@ -46,17 +76,8 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 	fmt.Println()
 
-	// Step 2: Storage Backend
+	// Step 2: Storage Backend (remote selection)
 	fmt.Println("  Step 2/5: Storage Backend")
-	rcloneVer, err := storage.CheckRcloneInstalled()
-	if err != nil {
-		fmt.Println("  > ✗ rclone not found. Please install from https://rclone.org")
-		fmt.Println("  > After installing rclone, run: rclone config")
-		fmt.Println("  > Then re-run: packrat init")
-		return err
-	}
-	fmt.Printf("  > Checking for rclone... ✓ Found (%s)\n", rcloneVer)
-
 	fmt.Printf("  > Which remote should Packrat use? [%s] ", cfg.Storage.RcloneRemote)
 	remote, _ := reader.ReadString('\n')
 	remote = strings.TrimSpace(remote)
@@ -70,6 +91,26 @@ func runInit(cmd *cobra.Command, args []string) error {
 			fmt.Println("  > Continuing anyway — you can configure the remote later.")
 		} else {
 			fmt.Println("  > ✓ Remote validated")
+		}
+	} else {
+		fmt.Print("  > No remote configured. Run 'rclone config' now to set one up? [Y/n] ")
+		rcAnswer, _ := reader.ReadString('\n')
+		rcAnswer = strings.TrimSpace(strings.ToLower(rcAnswer))
+		if rcAnswer != "n" && rcAnswer != "no" {
+			rcloneCmd := exec.Command(storage.RcloneBinary, "config")
+			rcloneCmd.Stdin = os.Stdin
+			rcloneCmd.Stdout = os.Stdout
+			rcloneCmd.Stderr = os.Stderr
+			if err := rcloneCmd.Run(); err != nil {
+				fmt.Printf("  > ⚠️  rclone config exited with error: %v\n", err)
+			}
+			// Re-prompt for remote after config
+			fmt.Print("  > Which remote should Packrat use? ")
+			remote, _ = reader.ReadString('\n')
+			remote = strings.TrimSpace(remote)
+			if remote != "" {
+				cfg.Storage.RcloneRemote = remote
+			}
 		}
 	}
 	fmt.Println()

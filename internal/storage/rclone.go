@@ -19,6 +19,10 @@ const (
 	maxRetries     = 3
 )
 
+// RcloneBinary is the path to the rclone binary. Defaults to "rclone" (found via PATH).
+// Set this after auto-install when the binary may not yet be in PATH.
+var RcloneBinary = "rclone"
+
 // RcloneBackend implements StorageBackend using rclone CLI.
 type RcloneBackend struct {
 	remote         string
@@ -39,7 +43,7 @@ func NewRcloneBackend(remote, basePath, bandwidthLimit string) *RcloneBackend {
 
 // CheckRcloneInstalled verifies rclone is available and returns its version.
 func CheckRcloneInstalled() (string, error) {
-	out, err := exec.Command("rclone", "version").Output()
+	out, err := exec.Command(RcloneBinary, "version").Output()
 	if err != nil {
 		return "", platform.ErrRcloneNotFound
 	}
@@ -52,7 +56,7 @@ func CheckRcloneInstalled() (string, error) {
 
 // ValidateRemote checks that the named remote exists in rclone config.
 func ValidateRemote(remote string) error {
-	out, err := exec.Command("rclone", "listremotes").Output()
+	out, err := exec.Command(RcloneBinary, "listremotes").Output()
 	if err != nil {
 		return fmt.Errorf("listing rclone remotes: %w", err)
 	}
@@ -94,7 +98,7 @@ func (r *RcloneBackend) Upload(ctx context.Context, remotePath string, reader io
 		}
 
 		args := append(r.baseArgs(), "rcat", r.remotePath(remotePath))
-		cmd := exec.CommandContext(ctx, "rclone", args...)
+		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 		cmd.Stdin = bytes.NewReader(data)
 
 		var stderr bytes.Buffer
@@ -110,7 +114,7 @@ func (r *RcloneBackend) Upload(ctx context.Context, remotePath string, reader io
 func (r *RcloneBackend) Download(ctx context.Context, remotePath string, writer io.Writer) error {
 	return r.withRetry(func() error {
 		args := append(r.baseArgs(), "cat", r.remotePath(remotePath))
-		cmd := exec.CommandContext(ctx, "rclone", args...)
+		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
@@ -130,7 +134,7 @@ func (r *RcloneBackend) List(ctx context.Context, prefix string) ([]RemoteEntry,
 	var entries []RemoteEntry
 	err := r.withRetry(func() error {
 		args := append(r.baseArgs(), "lsjson", r.remotePath(prefix))
-		cmd := exec.CommandContext(ctx, "rclone", args...)
+		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
 		var stdout bytes.Buffer
 		var stderr bytes.Buffer
@@ -174,7 +178,7 @@ func (r *RcloneBackend) List(ctx context.Context, prefix string) ([]RemoteEntry,
 func (r *RcloneBackend) Delete(ctx context.Context, remotePath string) error {
 	return r.withRetry(func() error {
 		args := append(r.baseArgs(), "deletefile", r.remotePath(remotePath))
-		cmd := exec.CommandContext(ctx, "rclone", args...)
+		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
@@ -188,7 +192,7 @@ func (r *RcloneBackend) Delete(ctx context.Context, remotePath string) error {
 
 func (r *RcloneBackend) Exists(ctx context.Context, remotePath string) (bool, error) {
 	args := append(r.baseArgs(), "lsjson", r.remotePath(remotePath))
-	cmd := exec.CommandContext(ctx, "rclone", args...)
+	cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
