@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -19,12 +20,21 @@ func NewLocalBackend(basePath string) *LocalBackend {
 	return &LocalBackend{basePath: basePath}
 }
 
-func (l *LocalBackend) fullPath(remotePath string) string {
-	return filepath.Join(l.basePath, remotePath)
+func (l *LocalBackend) fullPath(remotePath string) (string, error) {
+	joined := filepath.Join(l.basePath, remotePath)
+	cleaned := filepath.Clean(joined)
+	base := filepath.Clean(l.basePath) + string(filepath.Separator)
+	if !strings.HasPrefix(cleaned+string(filepath.Separator), base) {
+		return "", fmt.Errorf("path traversal detected: %s escapes base path", remotePath)
+	}
+	return cleaned, nil
 }
 
 func (l *LocalBackend) Upload(_ context.Context, remotePath string, reader io.Reader) error {
-	full := l.fullPath(remotePath)
+	full, err := l.fullPath(remotePath)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 		return fmt.Errorf("creating directory: %w", err)
 	}
@@ -42,7 +52,11 @@ func (l *LocalBackend) Upload(_ context.Context, remotePath string, reader io.Re
 }
 
 func (l *LocalBackend) Download(_ context.Context, remotePath string, writer io.Writer) error {
-	f, err := os.Open(l.fullPath(remotePath))
+	full, err := l.fullPath(remotePath)
+	if err != nil {
+		return err
+	}
+	f, err := os.Open(full)
 	if err != nil {
 		return fmt.Errorf("opening file: %w", err)
 	}
@@ -55,10 +69,13 @@ func (l *LocalBackend) Download(_ context.Context, remotePath string, writer io.
 }
 
 func (l *LocalBackend) List(_ context.Context, prefix string) ([]RemoteEntry, error) {
-	dir := l.fullPath(prefix)
+	dir, err := l.fullPath(prefix)
+	if err != nil {
+		return nil, err
+	}
 	var entries []RemoteEntry
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+	err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -82,11 +99,19 @@ func (l *LocalBackend) List(_ context.Context, prefix string) ([]RemoteEntry, er
 }
 
 func (l *LocalBackend) Delete(_ context.Context, remotePath string) error {
-	return os.Remove(l.fullPath(remotePath))
+	full, err := l.fullPath(remotePath)
+	if err != nil {
+		return err
+	}
+	return os.Remove(full)
 }
 
 func (l *LocalBackend) Exists(_ context.Context, remotePath string) (bool, error) {
-	_, err := os.Stat(l.fullPath(remotePath))
+	full, err := l.fullPath(remotePath)
+	if err != nil {
+		return false, err
+	}
+	_, err = os.Stat(full)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil

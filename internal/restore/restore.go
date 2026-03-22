@@ -110,6 +110,14 @@ func (r *Restorer) RestoreFiles(ctx context.Context, snap *backup.Snapshot, file
 				rel = strings.TrimPrefix(rel, "/")
 			}
 			destPath = filepath.Join(opts.DestDir, rel)
+
+			// Prevent path traversal: ensure destPath stays within DestDir
+			cleanDest := filepath.Clean(destPath)
+			cleanBase := filepath.Clean(opts.DestDir) + string(filepath.Separator)
+			if !strings.HasPrefix(cleanDest+string(filepath.Separator), cleanBase) {
+				return fmt.Errorf("path traversal detected: %s escapes destination directory", entry.Path)
+			}
+			destPath = cleanDest
 		}
 
 		if err := r.restoreFile(ctx, snap, entry, destPath, opts); err != nil {
@@ -164,6 +172,8 @@ func (r *Restorer) restoreFile(ctx context.Context, snap *backup.Snapshot, entry
 	if mode == 0 {
 		mode = 0o644
 	}
+	// Strip setuid, setgid, and sticky bits to prevent privilege escalation
+	mode &^= os.ModeSetuid | os.ModeSetgid | os.ModeSticky
 
 	if err := os.WriteFile(destPath, data, mode); err != nil {
 		return fmt.Errorf("writing file: %w", err)

@@ -13,7 +13,8 @@
       "Read(//home/harish/go/pkg/mod/github.com/**)",
       "Read(//home/harish/go/pkg/mod/**)",
       "Read(//home/harish/.go/pkg/mod/github.com/zalando/go-keyring@v0.2.7/**)",
-      "Bash(bin/packrat key:*)"
+      "Bash(bin/packrat key:*)",
+      "Bash(find /home/harish/projects/packrat -type f -name \"*.go\" -exec wc -l {} +)"
     ]
   }
 }

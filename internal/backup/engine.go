@@ -3,6 +3,8 @@ package backup
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"log/slog"
@@ -10,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/harish/packrat/internal/config"
@@ -228,14 +231,18 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup) (*Snaps
 		return nil, fmt.Errorf("marshaling snapshot: %w", err)
 	}
 
-	remoteMPath := e.cfg.General.MachineID + "/" + ManifestPath(group.Name, snap.ID)
-	if err := e.storage.Upload(ctx, remoteMPath, bytes.NewReader(manifestData)); err != nil {
-		return nil, fmt.Errorf("uploading manifest: %w", err)
-	}
-
-	// Save to local state
+	// Save to local state first (can be rolled back if manifest upload fails)
 	if err := e.stateDB.SaveSnapshot(snap); err != nil {
 		return nil, fmt.Errorf("saving snapshot state: %w", err)
+	}
+
+	remoteMPath := e.cfg.General.MachineID + "/" + ManifestPath(group.Name, snap.ID)
+	if err := e.storage.Upload(ctx, remoteMPath, bytes.NewReader(manifestData)); err != nil {
+		// Rollback local state on manifest upload failure
+		if delErr := e.stateDB.DeleteSnapshot(snap.ID); delErr != nil {
+			e.logger.Error("failed to rollback snapshot after manifest upload failure", "error", delErr)
+		}
+		return nil, fmt.Errorf("uploading manifest: %w", err)
 	}
 
 	return snap, nil
@@ -284,6 +291,13 @@ func (e *Engine) uploadBlob(ctx context.Context, filePath, hash string, encrypt 
 		return fmt.Errorf("reading file: %w", err)
 	}
 
+	// Verify file wasn't modified between initial hash and read
+	h := sha256.Sum256(data)
+	currentHash := hex.EncodeToString(h[:])
+	if currentHash != hash {
+		return fmt.Errorf("file modified during backup: %s (expected %s, got %s)", filePath, hash, currentHash)
+	}
+
 	var reader *bytes.Reader
 	blobName := BlobPath(hash)
 
@@ -312,25 +326,68 @@ func (e *Engine) acquireLock() error {
 		return err
 	}
 
-	// Check for existing lock
-	if data, err := os.ReadFile(lockPath); err == nil {
-		pid := strings.TrimSpace(string(data))
-		// Check if process is still running
-		if _, err := os.FindProcess(mustAtoi(pid)); err == nil {
-			// Check /proc to verify process exists (Linux-specific)
-			if _, err := os.Stat(fmt.Sprintf("/proc/%s", pid)); err == nil {
-				return platform.ErrLockAcquire
-			}
+	// Attempt atomic lock creation with O_CREATE|O_EXCL
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err == nil {
+		// Lock created successfully, write our PID
+		_, writeErr := fmt.Fprintf(f, "%d", os.Getpid())
+		f.Close()
+		if writeErr != nil {
+			os.Remove(lockPath)
+			return fmt.Errorf("writing lock file: %w", writeErr)
 		}
-		// Stale lock, remove it
-		os.Remove(lockPath)
+		return nil
 	}
 
-	return os.WriteFile(lockPath, []byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
+	if !os.IsExist(err) {
+		return fmt.Errorf("creating lock file: %w", err)
+	}
+
+	// Lock file exists — check if the owning process is still alive
+	data, readErr := os.ReadFile(lockPath)
+	if readErr != nil {
+		return platform.ErrLockAcquire
+	}
+
+	pid, parseErr := strconv.Atoi(strings.TrimSpace(string(data)))
+	if parseErr != nil || pid <= 0 {
+		// Corrupt lock file, remove and retry once
+		os.Remove(lockPath)
+		return e.acquireLockOnce()
+	}
+
+	// Use kill(pid, 0) to portably check if process exists (works on all Unix)
+	if err := syscall.Kill(pid, 0); err == nil {
+		// Process is still running
+		return platform.ErrLockAcquire
+	}
+
+	// Stale lock — process no longer exists. Remove and retry.
+	e.logger.Info("removing stale lock file", "pid", pid)
+	os.Remove(lockPath)
+	return e.acquireLockOnce()
+}
+
+// acquireLockOnce makes a single atomic attempt to create the lock file.
+func (e *Engine) acquireLockOnce() error {
+	lockPath := platform.LockFilePath()
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return platform.ErrLockAcquire
+	}
+	_, writeErr := fmt.Fprintf(f, "%d", os.Getpid())
+	f.Close()
+	if writeErr != nil {
+		os.Remove(lockPath)
+		return fmt.Errorf("writing lock file: %w", writeErr)
+	}
+	return nil
 }
 
 func (e *Engine) releaseLock() {
-	os.Remove(platform.LockFilePath())
+	if err := os.Remove(platform.LockFilePath()); err != nil && !os.IsNotExist(err) {
+		e.logger.Warn("failed to remove lock file", "error", err)
+	}
 }
 
 // GarbageCollect removes expired snapshots and orphaned blobs.
@@ -384,11 +441,6 @@ func filterGroups(all []config.BackupGroup, names []string) []config.BackupGroup
 		}
 	}
 	return filtered
-}
-
-func mustAtoi(s string) int {
-	n, _ := strconv.Atoi(s)
-	return n
 }
 
 func readAll(r interface{ Read([]byte) (int, error) }) ([]byte, error) {

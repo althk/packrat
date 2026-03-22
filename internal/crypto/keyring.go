@@ -40,6 +40,16 @@ func DeleteKey() error {
 
 // LoadKeyFromFile reads an age identity from a file.
 func LoadKeyFromFile(path string) (string, error) {
+	// Verify the key file has restrictive permissions before loading
+	info, err := os.Stat(path)
+	if err != nil {
+		return "", fmt.Errorf("reading key file: %w", err)
+	}
+	mode := info.Mode().Perm()
+	if mode&0o077 != 0 {
+		return "", fmt.Errorf("key file %s has insecure permissions %04o (expected 0600); fix with: chmod 600 %s", path, mode, path)
+	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("reading key file: %w", err)

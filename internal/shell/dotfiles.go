@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // DefaultDotfiles returns the list of commonly tracked dotfiles.
@@ -42,6 +43,8 @@ func DiscoverDotfiles(home string) []string {
 // For each file in the dotfiles dir, it creates a symlink at the original location
 // pointing back to the file in dotfilesDir.
 func SymlinkRestore(files []string, dotfilesDir string, home string) error {
+	cleanDotfilesDir := filepath.Clean(dotfilesDir)
+
 	for _, file := range files {
 		// Determine target path (where the symlink will be created)
 		target := file
@@ -52,6 +55,21 @@ func SymlinkRestore(files []string, dotfilesDir string, home string) error {
 		// Source path (in the dotfiles directory)
 		baseName := filepath.Base(file)
 		source := filepath.Join(dotfilesDir, baseName)
+
+		// Validate source stays within dotfilesDir (prevent path traversal)
+		cleanSource := filepath.Clean(source)
+		if !strings.HasPrefix(cleanSource, cleanDotfilesDir+string(filepath.Separator)) && cleanSource != cleanDotfilesDir {
+			return fmt.Errorf("path traversal detected: %s escapes dotfiles directory", file)
+		}
+
+		// Resolve symlinks in source to ensure it doesn't escape via symlink
+		realSource, err := filepath.EvalSymlinks(filepath.Dir(source))
+		if err == nil {
+			realSource = filepath.Join(realSource, filepath.Base(source))
+			if !strings.HasPrefix(realSource, cleanDotfilesDir) {
+				return fmt.Errorf("symlink escape detected: %s resolves outside dotfiles directory", source)
+			}
+		}
 
 		// Ensure source exists
 		if _, err := os.Stat(source); os.IsNotExist(err) {

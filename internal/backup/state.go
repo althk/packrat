@@ -3,6 +3,8 @@ package backup
 import (
 	"database/sql"
 	"fmt"
+	"log/slog"
+	"sync"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -11,6 +13,7 @@ import (
 // StateDB manages the local SQLite state database.
 type StateDB struct {
 	db *sql.DB
+	mu sync.Mutex // serializes write operations
 }
 
 // BackupRecord represents a historical backup run.
@@ -31,6 +34,12 @@ func OpenStateDB(path string) (*StateDB, error) {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, fmt.Errorf("opening state db: %w", err)
+	}
+
+	// Enable WAL mode for better concurrent read performance
+	if _, err := db.Exec("PRAGMA journal_mode=WAL"); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("enabling WAL mode: %w", err)
 	}
 
 	if err := createTables(db); err != nil {
@@ -76,15 +85,28 @@ func (s *StateDB) Close() error {
 
 // SaveSnapshot stores a snapshot manifest in the database.
 func (s *StateDB) SaveSnapshot(snap *Snapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	data, err := MarshalSnapshot(snap)
 	if err != nil {
 		return err
 	}
-	_, err = s.db.Exec(
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("beginning transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
 		"INSERT OR REPLACE INTO snapshots (id, timestamp, machine_id, group_name, manifest) VALUES (?, ?, ?, ?, ?)",
 		snap.ID, snap.Timestamp.UTC().Format(time.RFC3339), snap.MachineID, snap.Group, string(data),
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // GetLastSnapshot retrieves the most recent snapshot for a group.
@@ -128,6 +150,7 @@ func (s *StateDB) ListSnapshots(group string) ([]*Snapshot, error) {
 		}
 		snap, err := UnmarshalSnapshot([]byte(manifest))
 		if err != nil {
+			slog.Warn("skipping corrupted snapshot manifest", "error", err)
 			continue
 		}
 		snapshots = append(snapshots, snap)
@@ -137,6 +160,9 @@ func (s *StateDB) ListSnapshots(group string) ([]*Snapshot, error) {
 
 // RecordBackupRun saves a backup run record.
 func (s *StateDB) RecordBackupRun(group, snapshotID, status, errMsg string, duration time.Duration, filesChanged int, bytesUploaded int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	_, err := s.db.Exec(
 		"INSERT INTO backup_runs (timestamp, group_name, snapshot_id, status, error_msg, duration_ms, files_changed, bytes_uploaded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		time.Now().UTC().Format(time.RFC3339),
@@ -199,6 +225,9 @@ func (s *StateDB) GetLastBackupTime(group string) (time.Time, error) {
 
 // DeleteSnapshot removes a snapshot from the database.
 func (s *StateDB) DeleteSnapshot(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	_, err := s.db.Exec("DELETE FROM snapshots WHERE id = ?", id)
 	return err
 }

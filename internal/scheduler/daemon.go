@@ -44,7 +44,7 @@ func StartDaemon(executablePath string, cfgPath string) error {
 
 	// Write PID file
 	pid := cmd.Process.Pid
-	if err := os.WriteFile(platform.DaemonPIDPath(), []byte(strconv.Itoa(pid)), 0o644); err != nil {
+	if err := os.WriteFile(platform.DaemonPIDPath(), []byte(strconv.Itoa(pid)), 0o600); err != nil {
 		return fmt.Errorf("writing PID file: %w", err)
 	}
 

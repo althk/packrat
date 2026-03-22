@@ -91,7 +91,7 @@ func (r *RcloneBackend) baseArgs() []string {
 }
 
 func (r *RcloneBackend) Upload(ctx context.Context, remotePath string, reader io.Reader) error {
-	return r.withRetry(func() error {
+	return r.withRetry(ctx, func() error {
 		data, err := io.ReadAll(reader)
 		if err != nil {
 			return err
@@ -112,7 +112,7 @@ func (r *RcloneBackend) Upload(ctx context.Context, remotePath string, reader io
 }
 
 func (r *RcloneBackend) Download(ctx context.Context, remotePath string, writer io.Writer) error {
-	return r.withRetry(func() error {
+	return r.withRetry(ctx, func() error {
 		args := append(r.baseArgs(), "cat", r.remotePath(remotePath))
 		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
@@ -132,7 +132,7 @@ func (r *RcloneBackend) Download(ctx context.Context, remotePath string, writer 
 
 func (r *RcloneBackend) List(ctx context.Context, prefix string) ([]RemoteEntry, error) {
 	var entries []RemoteEntry
-	err := r.withRetry(func() error {
+	err := r.withRetry(ctx, func() error {
 		args := append(r.baseArgs(), "lsjson", r.remotePath(prefix))
 		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
@@ -176,7 +176,7 @@ func (r *RcloneBackend) List(ctx context.Context, prefix string) ([]RemoteEntry,
 }
 
 func (r *RcloneBackend) Delete(ctx context.Context, remotePath string) error {
-	return r.withRetry(func() error {
+	return r.withRetry(ctx, func() error {
 		args := append(r.baseArgs(), "deletefile", r.remotePath(remotePath))
 		cmd := exec.CommandContext(ctx, RcloneBinary, args...)
 
@@ -198,18 +198,32 @@ func (r *RcloneBackend) Exists(ctx context.Context, remotePath string) (bool, er
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return false, nil
+		// rclone exit code 3 means directory not found, exit code 4 means file not found
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			code := exitErr.ExitCode()
+			if code == 3 || code == 4 {
+				return false, nil
+			}
+		}
+		return false, fmt.Errorf("rclone lsjson %s: %s: %w", remotePath, stderr.String(), err)
 	}
 	return true, nil
 }
 
-func (r *RcloneBackend) withRetry(fn func() error) error {
+func (r *RcloneBackend) withRetry(ctx context.Context, fn func() error) error {
 	var lastErr error
 	for i := 0; i < maxRetries; i++ {
 		if err := fn(); err != nil {
 			lastErr = err
 			backoff := time.Duration(math.Pow(2, float64(i))) * time.Second
-			time.Sleep(backoff)
+			timer := time.NewTimer(backoff)
+			select {
+			case <-timer.C:
+				// backoff complete, retry
+			case <-ctx.Done():
+				timer.Stop()
+				return ctx.Err()
+			}
 			continue
 		}
 		return nil

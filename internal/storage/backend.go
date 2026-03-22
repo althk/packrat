@@ -3,11 +3,16 @@ package storage
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"sort"
 	"sync"
 	"time"
 )
+
+// ErrNotFound is returned when a requested file does not exist in storage.
+var ErrNotFound = errors.New("file not found")
 
 // StorageBackend abstracts remote storage operations.
 type StorageBackend interface {
@@ -53,7 +58,7 @@ func (m *MockBackend) Download(_ context.Context, remotePath string, writer io.W
 	defer m.mu.RUnlock()
 	data, ok := m.files[remotePath]
 	if !ok {
-		return io.EOF
+		return fmt.Errorf("file not found: %s: %w", remotePath, ErrNotFound)
 	}
 	_, err := io.Copy(writer, bytes.NewReader(data))
 	return err
