@@ -97,6 +97,10 @@ packrat daemon start
 | `packrat config validate` | Check config for errors |
 | `packrat config add-path <path>` | Quick-add a path to backup |
 | `packrat history` | Show backup run history |
+| `packrat key show` | Show the current encryption key pair |
+| `packrat key generate` | Generate a fresh key pair (old encrypted backups become inaccessible) |
+| `packrat key generate --force` | Generate a fresh key pair without confirmation |
+| `packrat key import <identity>` | Import an age identity into keyring or key file |
 | `packrat gc` | Run garbage collection on old snapshots |
 | `packrat rotate-key` | Generate new encryption key and re-encrypt blobs |
 | `packrat nuke --local` | Delete all local packrat data |
