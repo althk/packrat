@@ -22,6 +22,20 @@ import (
 	"github.com/harish/packrat/internal/storage"
 )
 
+// ProgressFunc is called to report backup progress for a group.
+// stage is one of "scanning", "uploading", "done".
+type ProgressFunc func(group, stage string, current, total int, bytes, totalBytes int64)
+
+// BackupOptions controls backup behavior.
+type BackupOptions struct {
+	// Force creates a snapshot even when no changes are detected.
+	Force bool
+	// Verbose enables detailed per-file logging during backup.
+	Verbose bool
+	// OnProgress is called to report progress. May be nil.
+	OnProgress ProgressFunc
+}
+
 // Engine orchestrates backup operations.
 type Engine struct {
 	cfg        *config.Config
@@ -43,7 +57,7 @@ func NewEngine(cfg *config.Config, store storage.StorageBackend, stateDB *StateD
 }
 
 // Run executes a full backup for the specified groups (or all if none specified).
-func (e *Engine) Run(ctx context.Context, groups ...string) error {
+func (e *Engine) Run(ctx context.Context, opts BackupOptions, groups ...string) error {
 	if err := e.acquireLock(); err != nil {
 		return err
 	}
@@ -73,7 +87,7 @@ func (e *Engine) Run(ctx context.Context, groups ...string) error {
 			defer func() { <-sem }()
 
 			start := time.Now()
-			snap, err := e.RunGroup(ctx, group)
+			snap, err := e.RunGroup(ctx, group, opts)
 			duration := time.Since(start)
 
 			if err != nil {
@@ -88,6 +102,9 @@ func (e *Engine) Run(ctx context.Context, groups ...string) error {
 					"duration", duration,
 				)
 				e.stateDB.RecordBackupRun(group.Name, snap.ID, "success", "", duration, snap.Stats.ChangedFiles+snap.Stats.AddedFiles, snap.Stats.UploadSize)
+			} else {
+				// No changes detected — still record a successful run so status tracks last check time
+				e.stateDB.RecordBackupRun(group.Name, "", "success", "", duration, 0, 0)
 			}
 		}(i, bg)
 	}
@@ -112,13 +129,28 @@ func (e *Engine) Run(ctx context.Context, groups ...string) error {
 }
 
 // RunGroup backs up a single backup group.
-func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup) (*Snapshot, error) {
+func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup, opts BackupOptions) (*Snapshot, error) {
 	e.logger.Info("starting backup", "group", group.Name)
 
+	progress := opts.OnProgress
+	if progress == nil {
+		progress = func(string, string, int, int, int64, int64) {}
+	}
+
 	// Walk and hash files
+	progress(group.Name, "scanning", 0, 0, 0, 0)
 	files, err := WalkPaths(group.Paths, group.Exclude)
 	if err != nil {
 		return nil, fmt.Errorf("walking paths for %s: %w", group.Name, err)
+	}
+
+	var totalSize int64
+	for _, fi := range files {
+		totalSize += fi.Size
+	}
+
+	if opts.Verbose {
+		e.logger.Info("scan complete", "group", group.Name, "files", len(files), "total_size", totalSize)
 	}
 
 	// Get last snapshot for diffing
@@ -142,7 +174,7 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup) (*Snaps
 		addedFiles   int
 	)
 
-	for _, fi := range files {
+	for i, fi := range files {
 		status := "unchanged"
 		prevHash, existed := lastHashes[fi.Path]
 
@@ -152,6 +184,10 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup) (*Snaps
 		} else if prevHash != fi.SHA256 {
 			status = "modified"
 			changedFiles++
+		}
+
+		if opts.Verbose && status != "unchanged" {
+			e.logger.Info("file change", "group", group.Name, "status", status, "path", fi.Path, "size", fi.Size)
 		}
 
 		mode, _ := strconv.ParseUint(fmt.Sprintf("%o", fi.Mode), 8, 32)
@@ -170,6 +206,7 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup) (*Snaps
 
 		// Upload changed/added blobs
 		if status == "added" || status == "modified" {
+			progress(group.Name, "uploading", i+1, len(files), uploadSize, totalSize)
 			if err := e.uploadBlob(ctx, fi.Path, fi.SHA256, group.Encrypt); err != nil {
 				return nil, fmt.Errorf("uploading blob %s: %w", fi.Path, err)
 			}
@@ -192,21 +229,26 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup) (*Snaps
 					Status: "deleted",
 				})
 				deletedFiles++
+				if opts.Verbose {
+					e.logger.Info("file change", "group", group.Name, "status", "deleted", "path", f.Path)
+				}
 			}
 		}
 	}
 
-	// Skip snapshot if nothing changed
+	// Skip snapshot if nothing changed (unless force is set)
 	if changedFiles == 0 && addedFiles == 0 && deletedFiles == 0 {
-		e.logger.Info("no changes detected", "group", group.Name)
-		return nil, nil
+		if opts.Force {
+			e.logger.Info("no changes detected, forcing snapshot", "group", group.Name)
+		} else {
+			e.logger.Info("no changes detected", "group", group.Name)
+			progress(group.Name, "done", len(files), len(files), 0, totalSize)
+			return nil, nil
+		}
 	}
 
 	// Create snapshot
-	var totalSize int64
-	for _, e := range entries {
-		totalSize += e.Size
-	}
+	progress(group.Name, "done", len(files), len(files), uploadSize, totalSize)
 
 	snap := &Snapshot{
 		ID:          GenerateSnapshotID(),

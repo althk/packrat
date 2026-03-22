@@ -51,7 +51,7 @@ func TestEngineRunGroup(t *testing.T) {
 		Exclude: []string{},
 	}
 
-	snap, err := engine.RunGroup(ctx, group)
+	snap, err := engine.RunGroup(ctx, group, BackupOptions{})
 	if err != nil {
 		t.Fatalf("RunGroup: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestEngineRunGroup(t *testing.T) {
 	}
 
 	// Run again without changes — should return nil (no changes)
-	snap2, err := engine.RunGroup(ctx, group)
+	snap2, err := engine.RunGroup(ctx, group, BackupOptions{})
 	if err != nil {
 		t.Fatalf("RunGroup second time: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestEngineRunGroup(t *testing.T) {
 
 	// Modify a file and re-run
 	os.WriteFile(filepath.Join(dir, "file1.txt"), []byte("hello modified"), 0o644)
-	snap3, err := engine.RunGroup(ctx, group)
+	snap3, err := engine.RunGroup(ctx, group, BackupOptions{})
 	if err != nil {
 		t.Fatalf("RunGroup third time: %v", err)
 	}

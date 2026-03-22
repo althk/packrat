@@ -55,7 +55,7 @@ func TestFullBackupRestoreCycle(t *testing.T) {
 	engine := NewEngine(cfg, store, stateDB)
 
 	// Run first backup
-	err = engine.Run(ctx, "test-files")
+	err = engine.Run(ctx, BackupOptions{}, "test-files")
 	if err != nil {
 		t.Fatalf("first backup: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestFullBackupRestoreCycle(t *testing.T) {
 
 	// Modify a file and run again
 	os.WriteFile(filepath.Join(sourceDir, "file1.txt"), []byte("hello world modified"), 0o644)
-	err = engine.Run(ctx, "test-files")
+	err = engine.Run(ctx, BackupOptions{}, "test-files")
 	if err != nil {
 		t.Fatalf("second backup: %v", err)
 	}
