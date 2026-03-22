@@ -26,7 +26,7 @@ Packrat is a CLI tool and background daemon that automatically backs up your she
 ### Prerequisites
 
 - **Go 1.22+** (for building from source)
-- **[rclone](https://rclone.org/install/)** — configured with at least one remote (Google Drive, S3, Dropbox, etc.)
+- **[rclone](https://rclone.org/install/)** — `packrat init` will offer to install it automatically if not found, or you can install and configure it yourself ahead of time
 
 ### Install
 
@@ -48,8 +48,9 @@ sudo cp bin/packrat /usr/local/bin/
 packrat init
 
 # This will:
+# 0. Check for rclone (offers to install it automatically if missing)
 # 1. Ask for a machine name
-# 2. Detect and validate your rclone remote
+# 2. Select an rclone remote (offers to run 'rclone config' if none exist)
 # 3. Generate encryption keys (stored in OS keyring)
 # 4. Auto-configure backup groups based on your shell
 # 5. Optionally start the background daemon
