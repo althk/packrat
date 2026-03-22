@@ -99,6 +99,15 @@ func DecryptWithPassphrase(reader io.Reader, passphrase string) (io.Reader, erro
 	return &buf, nil
 }
 
+// RecipientFromIdentity derives the public key (recipient) from a private key (identity) string.
+func RecipientFromIdentity(identityStr string) (string, error) {
+	identity, err := age.ParseX25519Identity(identityStr)
+	if err != nil {
+		return "", fmt.Errorf("parsing identity: %w", err)
+	}
+	return identity.Recipient().String(), nil
+}
+
 // IdentityFromString parses an age identity string.
 func IdentityFromString(s string) (age.Identity, error) {
 	ids, err := age.ParseIdentities(strings.NewReader(s))

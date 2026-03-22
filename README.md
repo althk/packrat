@@ -211,13 +211,67 @@ Identical files (even across groups) are stored only once — deduplication is a
 
 ### Encryption
 
-Packrat uses [age](https://age-encryption.org/) for encryption. Keys can be stored in:
+Packrat uses [age](https://age-encryption.org/) for encryption. Encryption has two layers:
 
-- **OS keyring** (default) — most convenient, keys survive reboots
-- **File** — you manage the key file
-- **Passphrase** — derived via scrypt, prompted each time
+1. **Global toggle** — `[encryption] enabled = true` enables the encryption system
+2. **Per-group flag** — each `[[backup]]` group has `encrypt = true/false`
 
-Encryption is per-group: sensitive configs can be encrypted while dotfiles stay plain.
+A file is only encrypted when **both** are enabled.
+
+#### What's encrypted by default
+
+| Group | Encrypted | Contents |
+|---|---|---|
+| `shell-history` | No | `~/.zsh_history`, `~/.bash_history`, etc. |
+| `dotfiles` | No | `~/.bashrc`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`, etc. |
+| `ai-configs` | **Yes** | `~/.claude/`, `~/.gemini/`, `~/.config/github-copilot/` |
+| `editor-configs` | No | `~/.config/nvim/`, VS Code settings/keybindings/snippets |
+| `gnupg` | **Yes** | `~/.gnupg/` (excluding lock files and agent sockets) |
+
+You can toggle encryption for any group by setting `encrypt = true` or `false` in its `[[backup]]` block.
+
+#### Key storage modes
+
+| `key_source` | Where the private key lives | Notes |
+|---|---|---|
+| `"keyring"` (default) | OS keyring (GNOME Keyring, macOS Keychain, etc.) | Most convenient; keys survive reboots but are tied to the machine |
+| `"file"` | File on disk (path set via `key_file` in config, default `~/.config/packrat/packrat.key`, mode 0600) | You manage the file |
+| `"prompt"` | Not stored — you provide the identity string each time | Only works for interactive restores |
+
+The **public key** (recipient) is always stored in `config.toml` under `encryption.recipient` and is used for encrypting during backup. Only the **private key** (identity) handling varies by `key_source`.
+
+#### Key recovery
+
+> **If you lose your private key, encrypted backups are unrecoverable.** There is no key escrow or recovery mechanism.
+
+During `packrat init`, the identity string (`AGE-SECRET-KEY-...`) is printed once. **Save it somewhere safe** (password manager, printed copy, etc.).
+
+If you're using `key_source = "keyring"` and didn't save the key during init, you can try to retrieve it from the OS keyring directly:
+
+```bash
+# Linux (GNOME Keyring / libsecret)
+secret-tool lookup service packrat username age-identity
+
+# macOS (Keychain)
+security find-generic-password -s packrat -a age-identity -w
+```
+
+Once retrieved, save it somewhere safe immediately.
+
+> **Warning:** The keyring lookup may return empty even when `key_source = "keyring"` is configured. This can happen if the keyring was cleared, if `packrat init` ran under a different session/user, or if the secret service daemon has changed. The config only stores the **public** key (`recipient`), so backups will continue to encrypt — but restores of encrypted data will fail without the private key. If the keyring is empty and you didn't save the recovery key, encrypted backups are **unrecoverable**.
+
+#### Moving to a new machine
+
+The private key is **not** uploaded to remote storage. To restore encrypted backups on a new machine:
+
+1. Install packrat and rclone on the new machine
+2. Run `packrat init --restore`
+3. Before restoring encrypted groups, import your key:
+   - **Keyring mode**: the key must be added to the new machine's keyring. You can do this programmatically or by switching to file mode temporarily.
+   - **File mode**: copy your key file to the new machine and set `key_file` in config
+   - **Prompt mode**: paste the identity string when prompted
+
+If you no longer have the key, unencrypted groups can still be restored — only encrypted groups (`ai-configs`, `gnupg` by default) will be inaccessible.
 
 ## Architecture
 

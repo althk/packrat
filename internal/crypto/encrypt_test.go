@@ -116,3 +116,24 @@ func TestKeyFileSaveLoad(t *testing.T) {
 		t.Errorf("loaded key = %q, want %q", loaded, identity)
 	}
 }
+
+func TestRecipientFromIdentity(t *testing.T) {
+	recipient, identity, err := GenerateKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	derived, err := RecipientFromIdentity(identity)
+	if err != nil {
+		t.Fatalf("RecipientFromIdentity: %v", err)
+	}
+
+	if derived != recipient {
+		t.Errorf("derived recipient = %q, want %q", derived, recipient)
+	}
+
+	_, err = RecipientFromIdentity("not-a-valid-key")
+	if err == nil {
+		t.Error("expected error for invalid identity")
+	}
+}
