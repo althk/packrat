@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Packrat installer
-# Usage: curl -sSL https://raw.githubusercontent.com/<user>/packrat/main/scripts/install.sh | bash
+# Usage: curl -sSL https://raw.githubusercontent.com/althk/packrat/main/scripts/install.sh | bash
 
-REPO="harish/packrat"
+REPO="althk/packrat"
 INSTALL_DIR="/usr/local/bin"
 
 detect_os() {
@@ -54,7 +54,58 @@ main() {
 
     rm -rf "${tmp}"
 
+    install_completions
+
     echo "Done! Run 'packrat init' to get started."
+}
+
+detect_shell() {
+    local current_shell
+    current_shell="$(basename "${SHELL:-}")"
+    case "$current_shell" in
+        bash|zsh|fish) echo "$current_shell";;
+        *) echo "";;
+    esac
+}
+
+install_completions() {
+    local shell_name
+    shell_name="$(detect_shell)"
+
+    if [ -z "$shell_name" ]; then
+        echo "Skipping shell completions: unsupported shell"
+        return
+    fi
+
+    echo "Installing ${shell_name} completions..."
+
+    case "$shell_name" in
+        bash)
+            local bash_comp_dir="/etc/bash_completion.d"
+            if [ -d "$bash_comp_dir" ]; then
+                packrat completion bash | sudo tee "${bash_comp_dir}/packrat" > /dev/null
+                echo "Bash completions installed to ${bash_comp_dir}/packrat"
+            else
+                local user_comp="${HOME}/.local/share/bash-completion/completions"
+                mkdir -p "$user_comp"
+                packrat completion bash > "${user_comp}/packrat"
+                echo "Bash completions installed to ${user_comp}/packrat"
+            fi
+            ;;
+        zsh)
+            local zsh_comp_dir="${HOME}/.zsh/completions"
+            mkdir -p "$zsh_comp_dir"
+            packrat completion zsh > "${zsh_comp_dir}/_packrat"
+            echo "Zsh completions installed to ${zsh_comp_dir}/_packrat"
+            echo "Ensure 'fpath=(~/.zsh/completions \$fpath)' is in your .zshrc (before compinit)"
+            ;;
+        fish)
+            local fish_comp_dir="${HOME}/.config/fish/completions"
+            mkdir -p "$fish_comp_dir"
+            packrat completion fish > "${fish_comp_dir}/packrat.fish"
+            echo "Fish completions installed to ${fish_comp_dir}/packrat.fish"
+            ;;
+    esac
 }
 
 main "$@"
