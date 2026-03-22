@@ -48,7 +48,7 @@ func runRotateKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("generating new key: %w", err)
 	}
 
-	fmt.Println("New key generated. Re-encrypting blobs...")
+	platform.Info("New key generated. Re-encrypting blobs...")
 
 	store := newStorageBackend()
 	ctx := context.Background()
@@ -70,14 +70,14 @@ func runRotateKey(cmd *cobra.Command, args []string) error {
 			oldBlobPath := snap.MachineID + "/" + backup.BlobPath(entry.SHA256) + ".age"
 			var buf bytes.Buffer
 			if err := store.Download(ctx, oldBlobPath, &buf); err != nil {
-				fmt.Printf("  Warning: could not download %s: %v\n", oldBlobPath, err)
+				platform.Warn(fmt.Sprintf("could not download %s: %v", oldBlobPath, err))
 				continue
 			}
 
 			// Decrypt with old key
 			decrypted, err := crypto.Decrypt(&buf, oldIdentity)
 			if err != nil {
-				fmt.Printf("  Warning: could not decrypt %s: %v\n", entry.Path, err)
+				platform.Warn(fmt.Sprintf("could not decrypt %s: %v", entry.Path, err))
 				continue
 			}
 
@@ -119,8 +119,9 @@ func runRotateKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("saving config: %w", err)
 	}
 
-	fmt.Printf("Key rotation complete. %d blobs re-encrypted.\n", reEncrypted)
-	fmt.Println("Save this recovery key somewhere safe:")
+	platform.Success(fmt.Sprintf("Key rotation complete. %d blobs re-encrypted.", reEncrypted))
+	fmt.Println()
+	platform.Warn("Save this recovery key somewhere safe:")
 	fmt.Printf("  %s\n", newIdentity)
 
 	return nil

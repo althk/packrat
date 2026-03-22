@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/harish/packrat/internal/backup"
+	"github.com/harish/packrat/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -41,21 +42,22 @@ func runVerify(cmd *cobra.Command, args []string) error {
 			}
 			currentHash, err := backup.ComputeFileHash(entry.Path)
 			if err != nil {
-				fmt.Printf("  MISSING  %s\n", entry.Path)
+				platform.FileChange("deleted", entry.Path+" (MISSING)")
 				totalMismatch++
 				continue
 			}
 			if currentHash != entry.SHA256 {
-				fmt.Printf("  CHANGED  %s\n", entry.Path)
+				platform.FileChange("modified", entry.Path+" (CHANGED)")
 				totalMismatch++
 			}
 		}
 	}
 
 	if totalMismatch == 0 {
-		fmt.Println("All files match their last snapshot. ✓")
+		platform.Success("All files match their last snapshot.")
 	} else {
-		fmt.Printf("\n%d file(s) have changed since last snapshot.\n", totalMismatch)
+		fmt.Println()
+		platform.Warn(fmt.Sprintf("%d file(s) have changed since last snapshot.", totalMismatch))
 	}
 
 	return nil

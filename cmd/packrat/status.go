@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/harish/packrat/internal/platform"
 	"github.com/harish/packrat/internal/scheduler"
 	"github.com/spf13/cobra"
 )
@@ -31,15 +32,19 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	// Daemon status
 	running, pid, _ := scheduler.DaemonStatus()
 	if running {
-		fmt.Printf("Daemon: running (PID %d)\n", pid)
+		platform.Success(fmt.Sprintf("Daemon running (PID %d)", pid))
 	} else {
-		fmt.Println("Daemon: stopped")
+		platform.Warn("Daemon stopped")
 	}
 	fmt.Println()
 
 	// Per-group status
-	fmt.Printf("%-20s %-25s %-10s\n", "GROUP", "LAST BACKUP", "STATUS")
-	fmt.Printf("%-20s %-25s %-10s\n", "─────", "───────────", "──────")
+	cols := []platform.TableCol{
+		{Name: "GROUP", Width: 20},
+		{Name: "LAST BACKUP", Width: 25},
+		{Name: "STATUS", Width: 10},
+	}
+	platform.TableHeader(cols...)
 
 	for _, bg := range appCfg.Backups {
 		lastTime, err := stateDB.GetLastBackupTime(bg.Name)
@@ -57,7 +62,7 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		fmt.Printf("%-20s %-25s %-10s\n", bg.Name, lastStr, status)
+		platform.TableRow(cols, bg.Name, lastStr, platform.StatusTag(status))
 	}
 
 	return nil

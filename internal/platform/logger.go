@@ -28,7 +28,7 @@ func SetupLogger(level string, logFile string, isInteractive bool) *slog.Logger 
 
 	var handler slog.Handler
 	if isInteractive {
-		handler = slog.NewTextHandler(os.Stderr, opts)
+		handler = newColorHandler(os.Stderr, lvl)
 	} else {
 		var w io.Writer
 		if logFile != "" {

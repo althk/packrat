@@ -33,11 +33,11 @@ func runNuke(cmd *cobra.Command, args []string) error {
 	}
 
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Are you sure? This cannot be undone. Type 'yes' to confirm: ")
+	platform.ConfirmPrompt("Are you sure? This cannot be undone. Type 'yes' to confirm:")
 	answer, _ := reader.ReadString('\n')
 	answer = strings.TrimSpace(answer)
 	if answer != "yes" {
-		fmt.Println("Aborted.")
+		platform.Info("Aborted.")
 		return nil
 	}
 
@@ -46,7 +46,7 @@ func runNuke(cmd *cobra.Command, args []string) error {
 		if err := os.RemoveAll(dataDir); err != nil {
 			return fmt.Errorf("removing local data: %w", err)
 		}
-		fmt.Printf("Removed local data: %s\n", dataDir)
+		platform.Success(fmt.Sprintf("Removed local data: %s", dataDir))
 	}
 
 	if nukeRemote {
@@ -68,7 +68,7 @@ func runNuke(cmd *cobra.Command, args []string) error {
 				store.Delete(ctx, e.Path)
 			}
 		}
-		fmt.Printf("Removed remote data for machine %s\n", appCfg.General.MachineID)
+		platform.Success(fmt.Sprintf("Removed remote data for machine %s", appCfg.General.MachineID))
 	}
 
 	return nil

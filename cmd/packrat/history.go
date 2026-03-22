@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-
+	"github.com/harish/packrat/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -35,27 +34,32 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(records) == 0 {
-		fmt.Println("No backup history found.")
+		platform.Info("No backup history found.")
 		return nil
 	}
 
-	fmt.Printf("%-25s %-15s %-12s %-10s %-8s %-10s\n",
-		"TIMESTAMP", "GROUP", "SNAPSHOT", "STATUS", "FILES", "DURATION")
-	fmt.Printf("%-25s %-15s %-12s %-10s %-8s %-10s\n",
-		"─────────", "─────", "────────", "──────", "─────", "────────")
+	cols := []platform.TableCol{
+		{Name: "TIMESTAMP", Width: 25},
+		{Name: "GROUP", Width: 15},
+		{Name: "SNAPSHOT", Width: 12},
+		{Name: "STATUS", Width: 10},
+		{Name: "FILES", Width: 8},
+		{Name: "DURATION", Width: 10},
+	}
+	platform.TableHeader(cols...)
 
 	for _, r := range records {
 		snapID := r.SnapshotID
 		if len(snapID) > 12 {
 			snapID = snapID[:12]
 		}
-		fmt.Printf("%-25s %-15s %-12s %-10s %-8d %-10s\n",
+		platform.TableRow(cols,
 			r.Timestamp.Format("2006-01-02 15:04:05"),
 			r.Group,
 			snapID,
-			r.Status,
-			r.Files,
-			r.Duration.Round(1e6),
+			platform.StatusTag(r.Status),
+			platform.Itoa(r.Files),
+			r.Duration.Round(1e6).String(),
 		)
 	}
 	return nil

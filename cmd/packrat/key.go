@@ -52,24 +52,26 @@ func runKeyShow(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("encryption is not enabled")
 	}
 
-	fmt.Printf("Public key (recipient): %s\n", appCfg.Encryption.Recipient)
-	fmt.Printf("Key source:             %s\n", appCfg.Encryption.KeySource)
+	platform.KeyValue("Public key (recipient)", appCfg.Encryption.Recipient)
+	platform.KeyValue("Key source            ", appCfg.Encryption.KeySource)
 
 	identity, err := loadIdentity(appCfg)
 	if err != nil {
-		fmt.Printf("Private key (identity): NOT FOUND (%v)\n", err)
-		fmt.Println("\nUse 'packrat key import' to re-import your recovery key.")
+		platform.Warn(fmt.Sprintf("Private key (identity): NOT FOUND (%v)", err))
+		fmt.Println()
+		platform.Info("Use 'packrat key import' to re-import your recovery key.")
 		return nil
 	}
 
-	fmt.Printf("Private key (identity): %s\n", identity)
+	platform.KeyValue("Private key (identity)", identity)
 
 	// Verify the key pair matches
 	derived, err := crypto.RecipientFromIdentity(identity)
 	if err == nil && derived != appCfg.Encryption.Recipient {
-		fmt.Println("\nWARNING: The stored identity does not match the recipient in config!")
-		fmt.Printf("  Config recipient:  %s\n", appCfg.Encryption.Recipient)
-		fmt.Printf("  Derived recipient: %s\n", derived)
+		fmt.Println()
+		platform.Warn("The stored identity does not match the recipient in config!")
+		platform.KeyValue("  Config recipient ", appCfg.Encryption.Recipient)
+		platform.KeyValue("  Derived recipient", derived)
 	}
 
 	return nil
@@ -101,9 +103,9 @@ func runKeyImport(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println("Key imported successfully.")
-	fmt.Printf("  Recipient: %s\n", recipient)
-	fmt.Printf("  Stored in: %s\n", appCfg.Encryption.KeySource)
+	platform.Success("Key imported successfully.")
+	platform.KeyValue("  Recipient", recipient)
+	platform.KeyValue("  Stored in", appCfg.Encryption.KeySource)
 	return nil
 }
 
@@ -115,14 +117,15 @@ func runKeyGenerate(cmd *cobra.Command, args []string) error {
 
 	force, _ := cmd.Flags().GetBool("force")
 	if !force {
-		fmt.Println("WARNING: Generating a new key pair will make ALL previously encrypted")
+		platform.Warn("Generating a new key pair will make ALL previously encrypted")
 		fmt.Println("backups inaccessible unless you still have the old identity key.")
-		fmt.Print("\nContinue? [y/N] ")
+		fmt.Println()
+		platform.ConfirmPrompt("Continue? [y/N]")
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		answer = strings.TrimSpace(strings.ToLower(answer))
 		if answer != "y" && answer != "yes" {
-			fmt.Println("Aborted.")
+			platform.Info("Aborted.")
 			return nil
 		}
 	}
@@ -142,10 +145,11 @@ func runKeyGenerate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println("New key pair generated.")
-	fmt.Printf("  Recipient: %s\n", recipient)
-	fmt.Printf("  Stored in: %s\n", appCfg.Encryption.KeySource)
-	fmt.Println("\nSave this recovery key somewhere safe:")
+	platform.Success("New key pair generated.")
+	platform.KeyValue("  Recipient", recipient)
+	platform.KeyValue("  Stored in", appCfg.Encryption.KeySource)
+	fmt.Println()
+	platform.Warn("Save this recovery key somewhere safe:")
 	fmt.Printf("  %s\n", identity)
 	return nil
 }

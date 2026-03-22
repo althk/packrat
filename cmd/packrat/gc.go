@@ -1,9 +1,8 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/harish/packrat/internal/backup"
+	"github.com/harish/packrat/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +33,6 @@ func runGC(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println("Garbage collection complete.")
+	platform.Success("Garbage collection complete.")
 	return nil
 }

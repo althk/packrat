@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/harish/packrat/internal/backup"
+	"github.com/harish/packrat/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -53,12 +54,12 @@ func runDiff(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(changes) == 0 {
-		fmt.Println("No changes detected.")
+		platform.Info("No changes detected.")
 		return nil
 	}
 
 	for group, fileChanges := range changes {
-		fmt.Printf("\n%s:\n", group)
+		platform.Header("\n" + group)
 		printChanges(fileChanges)
 	}
 	return nil
@@ -66,15 +67,6 @@ func runDiff(cmd *cobra.Command, args []string) error {
 
 func printChanges(changes []backup.FileChange) {
 	for _, c := range changes {
-		marker := " "
-		switch c.Status {
-		case "added":
-			marker = "+"
-		case "deleted":
-			marker = "-"
-		case "modified":
-			marker = "~"
-		}
-		fmt.Printf("  %s %s\n", marker, c.Path)
+		platform.FileChange(c.Status, c.Path)
 	}
 }

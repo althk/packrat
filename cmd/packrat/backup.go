@@ -1,9 +1,8 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/harish/packrat/internal/backup"
+	"github.com/harish/packrat/internal/platform"
 	"github.com/spf13/cobra"
 )
 
@@ -49,13 +48,13 @@ func runBackup(cmd *cobra.Command, args []string) error {
 			return err
 		}
 		if len(changes) == 0 {
-			fmt.Println("No changes detected.")
+			platform.Info("No changes detected.")
 			return nil
 		}
 		for group, fileChanges := range changes {
-			fmt.Printf("\n%s:\n", group)
+			platform.Header("\n" + group)
 			for _, c := range fileChanges {
-				fmt.Printf("  [%s] %s\n", c.Status, c.Path)
+				platform.FileChange(c.Status, c.Path)
 			}
 		}
 		return nil
@@ -71,7 +70,7 @@ func runBackup(cmd *cobra.Command, args []string) error {
 	}
 
 	if !quiet {
-		fmt.Println("Backup complete.")
+		platform.Success("Backup complete.")
 	}
 	return nil
 }

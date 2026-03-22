@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/harish/packrat/internal/platform"
 	"github.com/harish/packrat/internal/scheduler"
 	"github.com/harish/packrat/internal/storage"
 	"github.com/spf13/cobra"
@@ -55,7 +56,7 @@ func runDaemonStart(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Println("Daemon started.")
+	platform.Success("Daemon started.")
 	return nil
 }
 
@@ -63,7 +64,7 @@ func runDaemonStop(cmd *cobra.Command, args []string) error {
 	if err := scheduler.StopDaemon(); err != nil {
 		return err
 	}
-	fmt.Println("Daemon stopped.")
+	platform.Success("Daemon stopped.")
 	return nil
 }
 
@@ -73,9 +74,9 @@ func runDaemonStatus(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if running {
-		fmt.Printf("Daemon is running (PID %d)\n", pid)
+		platform.Success(fmt.Sprintf("Daemon is running (PID %d)", pid))
 	} else {
-		fmt.Println("Daemon is not running")
+		platform.Warn("Daemon is not running")
 	}
 	return nil
 }

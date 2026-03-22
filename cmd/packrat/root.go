@@ -52,6 +52,7 @@ func loadConfig() error {
 
 // setupLogger initializes the logger based on config and flags.
 func setupLogger() {
+	platform.SetColorEnabled(!noColor)
 	level := "info"
 	if appCfg != nil && appCfg.General.LogLevel != "" {
 		level = appCfg.General.LogLevel
