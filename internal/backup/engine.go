@@ -148,7 +148,7 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup, opts Ba
 
 	// Walk and hash files
 	progress(group.Name, "scanning", 0, 0, 0, 0)
-	files, err := WalkPaths(group.Paths, group.Exclude)
+	files, err := WalkPaths(group.Paths, group.Exclude, group.Include)
 	if err != nil {
 		return nil, fmt.Errorf("walking paths for %s: %w", group.Name, err)
 	}
@@ -356,7 +356,7 @@ func (e *Engine) DryRun(ctx context.Context, groups ...string) (map[string][]Fil
 	result := make(map[string][]FileChange)
 
 	for _, bg := range backupGroups {
-		files, err := WalkPaths(bg.Paths, bg.Exclude)
+		files, err := WalkPaths(bg.Paths, bg.Exclude, bg.Include)
 		if err != nil {
 			return nil, fmt.Errorf("walking %s: %w", bg.Name, err)
 		}

@@ -37,8 +37,10 @@ func ComputeFileHash(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// WalkPaths walks the given paths, applying exclude patterns, and returns file info.
-func WalkPaths(paths []string, excludes []string) ([]FileInfo, error) {
+// WalkPaths walks the given paths, applying include/exclude patterns, and returns file info.
+// When includes is non-empty, only files matching at least one include pattern are kept.
+// Excludes are applied after includes.
+func WalkPaths(paths []string, excludes []string, includes []string) ([]FileInfo, error) {
 	var files []FileInfo
 	seen := make(map[string]bool)
 
@@ -66,6 +68,9 @@ func WalkPaths(paths []string, excludes []string) ([]FileInfo, error) {
 				if shouldExclude(path, excludes) {
 					return nil
 				}
+				if !shouldInclude(path, includes) {
+					return nil
+				}
 				if seen[path] {
 					return nil
 				}
@@ -91,6 +96,9 @@ func WalkPaths(paths []string, excludes []string) ([]FileInfo, error) {
 			if shouldExclude(p, excludes) {
 				continue
 			}
+			if !shouldInclude(p, includes) {
+				continue
+			}
 			if seen[p] {
 				continue
 			}
@@ -111,6 +119,24 @@ func WalkPaths(paths []string, excludes []string) ([]FileInfo, error) {
 	}
 
 	return files, nil
+}
+
+// shouldInclude checks if a path matches at least one include pattern.
+// When includes is empty, all files are included.
+func shouldInclude(path string, includes []string) bool {
+	if len(includes) == 0 {
+		return true
+	}
+	base := filepath.Base(path)
+	for _, pattern := range includes {
+		if matched, _ := filepath.Match(pattern, base); matched {
+			return true
+		}
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return true
+		}
+	}
+	return false
 }
 
 // shouldExclude checks if a path matches any exclude patterns.

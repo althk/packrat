@@ -29,7 +29,7 @@ func TestWalkPaths(t *testing.T) {
 	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
 	os.WriteFile(filepath.Join(dir, "sub", "c.txt"), []byte("ccc"), 0o644)
 
-	files, err := WalkPaths([]string{dir}, []string{"*.log"})
+	files, err := WalkPaths([]string{dir}, []string{"*.log"}, nil)
 	if err != nil {
 		t.Fatalf("WalkPaths: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestWalkPaths(t *testing.T) {
 }
 
 func TestWalkPathsMissing(t *testing.T) {
-	files, err := WalkPaths([]string{"/nonexistent/path"}, nil)
+	files, err := WalkPaths([]string{"/nonexistent/path"}, nil, nil)
 	if err != nil {
 		t.Fatalf("WalkPaths should not error on missing: %v", err)
 	}
@@ -96,6 +96,77 @@ func TestContentDiff(t *testing.T) {
 	diff := ContentDiff(old, new)
 	if diff == "" {
 		t.Error("diff should not be empty")
+	}
+}
+
+func TestWalkPathsWithInclude(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# readme"), 0o644)
+	os.WriteFile(filepath.Join(dir, "notes.md"), []byte("# notes"), 0o644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
+	os.WriteFile(filepath.Join(dir, "data.json"), []byte("{}"), 0o644)
+	os.MkdirAll(filepath.Join(dir, "sub"), 0o755)
+	os.WriteFile(filepath.Join(dir, "sub", "deep.md"), []byte("# deep"), 0o644)
+	os.WriteFile(filepath.Join(dir, "sub", "code.go"), []byte("package sub"), 0o644)
+
+	files, err := WalkPaths([]string{dir}, nil, []string{"*.md"})
+	if err != nil {
+		t.Fatalf("WalkPaths: %v", err)
+	}
+
+	if len(files) != 3 {
+		t.Errorf("len = %d, want 3", len(files))
+		for _, f := range files {
+			t.Logf("  %s", f.Path)
+		}
+	}
+
+	for _, f := range files {
+		if filepath.Ext(f.Path) != ".md" {
+			t.Errorf("unexpected non-.md file: %s", f.Path)
+		}
+	}
+}
+
+func TestWalkPathsIncludeAndExclude(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "readme.md"), []byte("# readme"), 0o644)
+	os.WriteFile(filepath.Join(dir, "CHANGELOG.md"), []byte("# changes"), 0o644)
+	os.WriteFile(filepath.Join(dir, "main.go"), []byte("package main"), 0o644)
+
+	// Include only .md, but exclude CHANGELOG.md
+	files, err := WalkPaths([]string{dir}, []string{"CHANGELOG.md"}, []string{"*.md"})
+	if err != nil {
+		t.Fatalf("WalkPaths: %v", err)
+	}
+
+	if len(files) != 1 {
+		t.Errorf("len = %d, want 1", len(files))
+		for _, f := range files {
+			t.Logf("  %s", f.Path)
+		}
+	}
+}
+
+func TestShouldInclude(t *testing.T) {
+	tests := []struct {
+		path     string
+		includes []string
+		want     bool
+	}{
+		{"/tmp/readme.md", []string{"*.md"}, true},
+		{"/tmp/main.go", []string{"*.md"}, false},
+		{"/tmp/test.txt", nil, true},
+		{"/tmp/test.txt", []string{}, true},
+		{"/tmp/notes.MD", []string{"*.md"}, false}, // case-sensitive
+		{"/tmp/file.tar.gz", []string{"*.gz", "*.md"}, true},
+	}
+
+	for _, tt := range tests {
+		got := shouldInclude(tt.path, tt.includes)
+		if got != tt.want {
+			t.Errorf("shouldInclude(%q, %v) = %v, want %v", tt.path, tt.includes, got, tt.want)
+		}
 	}
 }
 

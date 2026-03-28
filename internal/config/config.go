@@ -68,6 +68,7 @@ type BackupGroup struct {
 	Encrypt  bool     `toml:"encrypt"`
 	Interval string   `toml:"interval"`
 	Exclude  []string `toml:"exclude"`
+	Include  []string `toml:"include"`
 }
 
 type HookConfig struct {
