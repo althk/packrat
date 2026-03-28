@@ -74,42 +74,42 @@ packrat daemon start
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `packrat init` | First-time setup wizard |
-| `packrat backup` | Run backup now (all groups or `--group <name>`) |
-| `packrat backup --dry-run` | Show what would be backed up |
-| `packrat restore` | Launch TUI restore interface |
-| `packrat restore --list` | List available snapshots |
-| `packrat restore --latest --group dotfiles` | Restore latest snapshot for a group |
-| `packrat restore --snapshot <id>` | Restore a specific snapshot |
-| `packrat restore --file <path>` | Restore a single file |
-| `packrat status` | Show daemon status and last backup times |
-| `packrat diff` | Diff current files vs last snapshot |
-| `packrat diff <snap1> <snap2>` | Diff between two snapshots |
-| `packrat verify` | Verify file integrity against last snapshot |
-| `packrat daemon start` | Start the background scheduler |
-| `packrat daemon stop` | Stop the background scheduler |
-| `packrat daemon status` | Check if daemon is running |
-| `packrat log` | Show recent log entries |
-| `packrat config show` | Print resolved config |
-| `packrat config edit` | Open config in `$EDITOR` |
-| `packrat config validate` | Check config for errors |
-| `packrat config add-path <path>` | Quick-add a path to backup |
-| `packrat history` | Show backup run history |
-| `packrat key show` | Show the current encryption key pair |
-| `packrat key generate` | Generate a fresh key pair (old encrypted backups become inaccessible) |
-| `packrat key generate --force` | Generate a fresh key pair without confirmation |
-| `packrat key import <identity>` | Import an age identity into keyring or key file |
-| `packrat gc` | Run garbage collection on old snapshots |
-| `packrat rotate-key` | Generate new encryption key and re-encrypt blobs |
-| `packrat nuke --local` | Delete all local packrat data |
-| `packrat nuke --remote` | Delete all remote packrat data |
-| `packrat version` | Print version info |
+| Command                                     | Description                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------- |
+| `packrat init`                              | First-time setup wizard                                               |
+| `packrat backup`                            | Run backup now (all groups or `--group <name>`)                       |
+| `packrat backup --dry-run`                  | Show what would be backed up                                          |
+| `packrat restore`                           | Launch TUI restore interface                                          |
+| `packrat restore --list`                    | List available snapshots                                              |
+| `packrat restore --latest --group dotfiles` | Restore latest snapshot for a group                                   |
+| `packrat restore --snapshot <id>`           | Restore a specific snapshot                                           |
+| `packrat restore --file <path>`             | Restore a single file                                                 |
+| `packrat status`                            | Show daemon status and last backup times                              |
+| `packrat diff`                              | Diff current files vs last snapshot                                   |
+| `packrat diff <snap1> <snap2>`              | Diff between two snapshots                                            |
+| `packrat verify`                            | Verify file integrity against last snapshot                           |
+| `packrat daemon start`                      | Start the background scheduler                                        |
+| `packrat daemon stop`                       | Stop the background scheduler                                         |
+| `packrat daemon status`                     | Check if daemon is running                                            |
+| `packrat log`                               | Show recent log entries                                               |
+| `packrat config show`                       | Print resolved config                                                 |
+| `packrat config edit`                       | Open config in `$EDITOR`                                              |
+| `packrat config validate`                   | Check config for errors                                               |
+| `packrat config add-path <path>`            | Quick-add a path to backup                                            |
+| `packrat history`                           | Show backup run history                                               |
+| `packrat key show`                          | Show the current encryption key pair                                  |
+| `packrat key generate`                      | Generate a fresh key pair (old encrypted backups become inaccessible) |
+| `packrat key generate --force`              | Generate a fresh key pair without confirmation                        |
+| `packrat key import <identity>`             | Import an age identity into keyring or key file                       |
+| `packrat gc`                                | Run garbage collection on old snapshots                               |
+| `packrat rotate-key`                        | Generate new encryption key and re-encrypt blobs                      |
+| `packrat nuke --local`                      | Delete all local packrat data                                         |
+| `packrat nuke --remote`                     | Delete all remote packrat data                                        |
+| `packrat version`                           | Print version info                                                    |
 
 ### Global Flags
 
-```
+```sh
 --config <path>    Override config file location
 --verbose / -v     Enable debug logging
 --quiet / -q       Suppress all output except errors
@@ -162,6 +162,14 @@ encrypt = true                     # Encrypted before upload
 interval = "2h"
 exclude = ["*.log", "*.cache"]
 
+[[backup]]
+name = "project-notes"
+paths = ["~/projects/myproject"]
+encrypt = false
+interval = "2h"
+include = ["*.md"]                 # Only back up matching files
+exclude = []
+
 # Hooks — run commands before/after backup
 [[hook]]
 name = "dump-packages"
@@ -204,7 +212,7 @@ This walks you through selecting a remote, choosing which machine's backups to r
 
 Files are stored by their SHA-256 hash in a two-level directory structure:
 
-```
+```sh
 packrat-backups/<machine-id>/
 ├── manifests/<group>/<snapshot-id>.json
 ├── blobs/ab/c123def456...        # First 2 chars / rest of hash
@@ -224,23 +232,23 @@ A file is only encrypted when **both** are enabled.
 
 #### What's encrypted by default
 
-| Group | Encrypted | Contents |
-|---|---|---|
-| `shell-history` | No | `~/.zsh_history`, `~/.bash_history`, etc. |
-| `dotfiles` | No | `~/.bashrc`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`, etc. |
-| `ai-configs` | **Yes** | `~/.claude/`, `~/.gemini/`, `~/.config/github-copilot/` |
-| `editor-configs` | No | `~/.config/nvim/`, VS Code settings/keybindings/snippets |
-| `gnupg` | **Yes** | `~/.gnupg/` (excluding lock files and agent sockets) |
+| Group            | Encrypted | Contents                                                       |
+| ---------------- | --------- | -------------------------------------------------------------- |
+| `shell-history`  | No        | `~/.zsh_history`, `~/.bash_history`, etc.                      |
+| `dotfiles`       | No        | `~/.bashrc`, `~/.zshrc`, `~/.gitconfig`, `~/.ssh/config`, etc. |
+| `ai-configs`     | **Yes**   | `~/.claude/`, `~/.gemini/`, `~/.config/github-copilot/`        |
+| `editor-configs` | No        | `~/.config/nvim/`, VS Code settings/keybindings/snippets       |
+| `gnupg`          | **Yes**   | `~/.gnupg/` (excluding lock files and agent sockets)           |
 
 You can toggle encryption for any group by setting `encrypt = true` or `false` in its `[[backup]]` block.
 
 #### Key storage modes
 
-| `key_source` | Where the private key lives | Notes |
-|---|---|---|
-| `"keyring"` (default) | OS keyring (GNOME Keyring, macOS Keychain, etc.) | Most convenient; keys survive reboots but are tied to the machine |
-| `"file"` | File on disk (path set via `key_file` in config, default `~/.config/packrat/packrat.key`, mode 0600) | You manage the file |
-| `"prompt"` | Not stored — you provide the identity string each time | Only works for interactive restores |
+| `key_source`          | Where the private key lives                                                                          | Notes                                                             |
+| --------------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `"keyring"` (default) | OS keyring (GNOME Keyring, macOS Keychain, etc.)                                                     | Most convenient; keys survive reboots but are tied to the machine |
+| `"file"`              | File on disk (path set via `key_file` in config, default `~/.config/packrat/packrat.key`, mode 0600) | You manage the file                                               |
+| `"prompt"`            | Not stored — you provide the identity string each time                                               | Only works for interactive restores                               |
 
 The **public key** (recipient) is always stored in `config.toml` under `encryption.recipient` and is used for encrypting during backup. Only the **private key** (identity) handling varies by `key_source`.
 
@@ -279,7 +287,7 @@ If you no longer have the key, unencrypted groups can still be restored — only
 
 ## Architecture
 
-```
+```text
 ┌────────────────────────────────────────────────┐
 │                   CLI Layer                     │
 │  packrat init | backup | restore | daemon | ... │
@@ -303,7 +311,7 @@ If you no longer have the key, unencrypted groups can still be restored — only
 
 ### Project Structure
 
-```
+```sh
 packrat/
 ├── cmd/packrat/          # CLI entry point and commands
 ├── internal/
@@ -375,19 +383,19 @@ open coverage.html
 
 ### Dependencies
 
-| Package | Purpose |
-|---|---|
-| `github.com/spf13/cobra` | CLI framework |
-| `github.com/BurntSushi/toml` | Config parsing |
-| `github.com/robfig/cron/v3` | Cron scheduling |
-| `filippo.io/age` | Encryption |
-| `github.com/zalando/go-keyring` | OS keyring |
-| `modernc.org/sqlite` | State database (pure Go) |
-| `github.com/charmbracelet/bubbletea` | TUI framework |
-| `github.com/charmbracelet/lipgloss` | TUI styling |
-| `github.com/charmbracelet/bubbles` | TUI components |
-| `github.com/sergi/go-diff` | Text diffing |
-| `gopkg.in/lumberjack.v2` | Log rotation |
+| Package                              | Purpose                  |
+| ------------------------------------ | ------------------------ |
+| `github.com/spf13/cobra`             | CLI framework            |
+| `github.com/BurntSushi/toml`         | Config parsing           |
+| `github.com/robfig/cron/v3`          | Cron scheduling          |
+| `filippo.io/age`                     | Encryption               |
+| `github.com/zalando/go-keyring`      | OS keyring               |
+| `modernc.org/sqlite`                 | State database (pure Go) |
+| `github.com/charmbracelet/bubbletea` | TUI framework            |
+| `github.com/charmbracelet/lipgloss`  | TUI styling              |
+| `github.com/charmbracelet/bubbles`   | TUI components           |
+| `github.com/sergi/go-diff`           | Text diffing             |
+| `gopkg.in/lumberjack.v2`             | Log rotation             |
 
 ## Generated by AI
 
@@ -399,4 +407,4 @@ MIT
 
 ---
 
-*Built with 🐀 energy — hoard everything, lose nothing.*
+_Built with 🐀 energy — hoard everything, lose nothing._
