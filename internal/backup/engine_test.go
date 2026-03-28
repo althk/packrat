@@ -160,7 +160,7 @@ func TestReadLockStatus(t *testing.T) {
 		t.Fatalf("writing lock file: %v", err)
 	}
 
-	running, groups = ReadLockStatus()
+	running, _ = ReadLockStatus()
 	if running {
 		t.Fatal("expected not running for dead PID")
 	}
