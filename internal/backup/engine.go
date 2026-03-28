@@ -74,6 +74,11 @@ func (e *Engine) Run(ctx context.Context, opts BackupOptions, groups ...string) 
 		backupGroups = filterGroups(e.cfg.Backups, groups)
 	}
 
+	// Update lock file with active group names
+	if err := e.writeLockGroups(backupGroups); err != nil {
+		e.logger.Warn("failed to update lock file with group names", "error", err)
+	}
+
 	// Run groups with limited concurrency
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, e.maxWorkers)
@@ -408,6 +413,41 @@ func (e *Engine) acquireLock() error {
 	e.logger.Info("removing stale lock file", "pid", pid)
 	os.Remove(lockPath)
 	return e.acquireLockOnce()
+}
+
+// writeLockGroups updates the lock file to include the names of active backup groups.
+func (e *Engine) writeLockGroups(groups []config.BackupGroup) error {
+	lockPath := platform.LockFilePath()
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%d\n", os.Getpid())
+	for _, g := range groups {
+		fmt.Fprintf(&buf, "%s\n", g.Name)
+	}
+	return os.WriteFile(lockPath, buf.Bytes(), 0o600)
+}
+
+// ReadLockStatus checks whether a backup is currently running and returns the
+// active group names. Returns running=false if no lock exists or the lock is stale.
+func ReadLockStatus() (running bool, groups []string) {
+	data, err := os.ReadFile(platform.LockFilePath())
+	if err != nil {
+		return false, nil
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 {
+		return false, nil
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(lines[0]))
+	if err != nil || pid <= 0 {
+		return false, nil
+	}
+	if err := syscall.Kill(pid, 0); err != nil {
+		return false, nil
+	}
+	if len(lines) > 1 {
+		groups = lines[1:]
+	}
+	return true, groups
 }
 
 // acquireLockOnce makes a single atomic attempt to create the lock file.

@@ -25,10 +25,11 @@ var (
 	styleModified = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
 	styleDeleted  = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
 
-	styleTagOK      = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
-	styleTagOverdue = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
-	styleTagPending = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	styleTagFailure = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	styleTagOK         = lipgloss.NewStyle().Foreground(lipgloss.Color("42")).Bold(true)
+	styleTagOverdue    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	styleTagPending    = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	styleTagFailure    = lipgloss.NewStyle().Foreground(lipgloss.Color("196")).Bold(true)
+	styleTagInProgress = lipgloss.NewStyle().Foreground(lipgloss.Color("33")).Bold(true)
 
 	styleKey   = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
 	styleValue = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
@@ -108,6 +109,8 @@ func StatusTag(status string) string {
 		return render(styleTagPending, status)
 	case "failure":
 		return render(styleTagFailure, status)
+	case "in-progress":
+		return render(styleTagInProgress, status)
 	default:
 		return status
 	}

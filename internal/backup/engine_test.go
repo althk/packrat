@@ -2,6 +2,7 @@ package backup
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -123,5 +124,44 @@ func TestEngineGarbageCollect(t *testing.T) {
 	// GC should not error on empty state
 	if err := engine.GarbageCollect(ctx); err != nil {
 		t.Fatalf("GarbageCollect: %v", err)
+	}
+}
+
+func TestReadLockStatus(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("PACKRAT_DATA_DIR", dataDir)
+
+	// No lock file → not running
+	running, groups := ReadLockStatus()
+	if running {
+		t.Fatal("expected not running when no lock file exists")
+	}
+	if len(groups) != 0 {
+		t.Fatal("expected no groups")
+	}
+
+	// Lock file with our own PID and group names → running
+	lockPath := filepath.Join(dataDir, "packrat.lock")
+	content := fmt.Sprintf("%d\nshell-history\ndotfiles\n", os.Getpid())
+	if err := os.WriteFile(lockPath, []byte(content), 0o600); err != nil {
+		t.Fatalf("writing lock file: %v", err)
+	}
+
+	running, groups = ReadLockStatus()
+	if !running {
+		t.Fatal("expected running when lock file has live PID")
+	}
+	if len(groups) != 2 || groups[0] != "shell-history" || groups[1] != "dotfiles" {
+		t.Fatalf("unexpected groups: %v", groups)
+	}
+
+	// Lock file with dead PID → not running
+	if err := os.WriteFile(lockPath, []byte("999999999\nshell-history\n"), 0o600); err != nil {
+		t.Fatalf("writing lock file: %v", err)
+	}
+
+	running, groups = ReadLockStatus()
+	if running {
+		t.Fatal("expected not running for dead PID")
 	}
 }

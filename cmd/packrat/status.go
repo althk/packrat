@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/harish/packrat/internal/backup"
 	"github.com/harish/packrat/internal/platform"
 	"github.com/harish/packrat/internal/scheduler"
 	"github.com/spf13/cobra"
@@ -46,6 +47,13 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	}
 	platform.TableHeader(cols...)
 
+	// Check if a backup is currently running and which groups are active
+	backupRunning, activeGroups := backup.ReadLockStatus()
+	activeSet := make(map[string]bool, len(activeGroups))
+	for _, g := range activeGroups {
+		activeSet[g] = true
+	}
+
 	for _, bg := range appCfg.Backups {
 		lastTime, err := stateDB.GetLastBackupTime(bg.Name)
 		lastStr := "never"
@@ -60,6 +68,10 @@ func runStatus(cmd *cobra.Command, args []string) error {
 			} else {
 				status = "ok"
 			}
+		}
+
+		if backupRunning && activeSet[bg.Name] {
+			status = "in-progress"
 		}
 
 		platform.TableRow(cols, bg.Name, lastStr, platform.StatusTag(status))
