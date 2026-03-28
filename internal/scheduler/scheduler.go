@@ -83,7 +83,10 @@ func (s *Scheduler) RunOverdue(ctx context.Context) error {
 		return nil
 	}
 	s.logger.Info("running overdue backups", "groups", overdue)
-	return s.engine.Run(ctx, backup.BackupOptions{}, overdue...)
+	opts := backup.BackupOptions{
+		OnProgress: backup.LoggingProgress(s.logger, 5*time.Second),
+	}
+	return s.engine.Run(ctx, opts, overdue...)
 }
 
 // NextRun returns the next scheduled run time for a group.
@@ -104,7 +107,10 @@ func (s *Scheduler) runGroup(bg config.BackupGroup) {
 	}
 
 	ctx := context.Background()
-	if err := s.engine.Run(ctx, backup.BackupOptions{}, bg.Name); err != nil {
+	opts := backup.BackupOptions{
+		OnProgress: backup.LoggingProgress(s.logger, 5*time.Second),
+	}
+	if err := s.engine.Run(ctx, opts, bg.Name); err != nil {
 		s.logger.Error("scheduled backup failed", "group", bg.Name, "error", err)
 	}
 }
