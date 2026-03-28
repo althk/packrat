@@ -44,6 +44,7 @@ type Engine struct {
 	stateDB    *StateDB
 	logger     *slog.Logger
 	maxWorkers int
+	lockMu     sync.Mutex // protects lock file writes
 }
 
 // NewEngine creates a new backup engine.
@@ -98,6 +99,8 @@ func (e *Engine) Run(ctx context.Context, opts BackupOptions, groups ...string) 
 			start := time.Now()
 			snap, err := e.RunGroup(ctx, group, opts)
 			duration := time.Since(start)
+
+			e.removeLockGroup(group.Name)
 
 			if err != nil {
 				errs[idx] = err
@@ -468,6 +471,8 @@ func (e *Engine) acquireLock() error {
 
 // writeLockGroups updates the lock file to include the names of active backup groups.
 func (e *Engine) writeLockGroups(groups []config.BackupGroup) error {
+	e.lockMu.Lock()
+	defer e.lockMu.Unlock()
 	lockPath := platform.LockFilePath()
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%d\n", os.Getpid())
@@ -475,6 +480,32 @@ func (e *Engine) writeLockGroups(groups []config.BackupGroup) error {
 		fmt.Fprintf(&buf, "%s\n", g.Name)
 	}
 	return os.WriteFile(lockPath, buf.Bytes(), 0o600)
+}
+
+// removeLockGroup removes a completed group from the lock file so that
+// status queries no longer report it as in-progress.
+func (e *Engine) removeLockGroup(name string) {
+	e.lockMu.Lock()
+	defer e.lockMu.Unlock()
+	lockPath := platform.LockFilePath()
+	data, err := os.ReadFile(lockPath)
+	if err != nil {
+		return
+	}
+	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
+	if len(lines) == 0 {
+		return
+	}
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "%s\n", lines[0]) // PID line
+	for _, line := range lines[1:] {
+		if strings.TrimSpace(line) != name {
+			fmt.Fprintf(&buf, "%s\n", line)
+		}
+	}
+	if err := os.WriteFile(lockPath, buf.Bytes(), 0o600); err != nil {
+		e.logger.Warn("failed to update lock file after group completion", "group", name, "error", err)
+	}
 }
 
 // ReadLockStatus checks whether a backup is currently running and returns the
