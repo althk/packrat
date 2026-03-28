@@ -21,10 +21,11 @@ type Config struct {
 }
 
 type GeneralConfig struct {
-	MachineName string `toml:"machine_name"`
-	MachineID   string `toml:"machine_id"`
-	LogLevel    string `toml:"log_level"`
-	LogFile     string `toml:"log_file"`
+	MachineName     string `toml:"machine_name"`
+	MachineID       string `toml:"machine_id"`
+	LogLevel        string `toml:"log_level"`
+	LogFile         string `toml:"log_file"`
+	ParallelUploads int    `toml:"parallel_uploads"`
 }
 
 type SchedulerConfig struct {
@@ -93,6 +94,11 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("%w: %v", platform.ErrConfigInvalid, err)
 	}
 
+	// Default parallel_uploads to 3 if not set
+	if cfg.General.ParallelUploads == 0 {
+		cfg.General.ParallelUploads = 3
+	}
+
 	cfg.expandPaths()
 	return &cfg, nil
 }
@@ -104,6 +110,9 @@ func Validate(c *Config) error {
 	}
 	if c.Storage.RcloneRemote == "" {
 		return fmt.Errorf("%w: rclone_remote is required", platform.ErrConfigInvalid)
+	}
+	if c.General.ParallelUploads < 1 || c.General.ParallelUploads > 10 {
+		return fmt.Errorf("%w: parallel_uploads must be between 1 and 10 (got %d)", platform.ErrConfigInvalid, c.General.ParallelUploads)
 	}
 
 	// Validate scheduler interval

@@ -92,6 +92,40 @@ func TestEngineRunGroup(t *testing.T) {
 	}
 }
 
+func TestEngineParallelUploads(t *testing.T) {
+	engine, mock := testEngine(t)
+	engine.cfg.General.ParallelUploads = 3
+	ctx := context.Background()
+
+	// Create enough files to exercise parallel upload paths
+	dir := t.TempDir()
+	for i := 0; i < 10; i++ {
+		os.WriteFile(filepath.Join(dir, fmt.Sprintf("file%d.txt", i)), []byte(fmt.Sprintf("content-%d", i)), 0o644)
+	}
+
+	group := config.BackupGroup{
+		Name:  "parallel-test",
+		Paths: []string{dir},
+	}
+
+	snap, err := engine.RunGroup(ctx, group, BackupOptions{})
+	if err != nil {
+		t.Fatalf("RunGroup: %v", err)
+	}
+	if snap == nil {
+		t.Fatal("expected snapshot, got nil")
+	}
+	if snap.Stats.AddedFiles != 10 {
+		t.Errorf("AddedFiles = %d, want 10", snap.Stats.AddedFiles)
+	}
+
+	// Verify all 10 blobs + 1 manifest were uploaded
+	entries, _ := mock.List(ctx, "")
+	if len(entries) != 11 {
+		t.Errorf("expected 11 uploads (10 blobs + 1 manifest), got %d", len(entries))
+	}
+}
+
 func TestEngineDryRun(t *testing.T) {
 	engine, _ := testEngine(t)
 	ctx := context.Background()

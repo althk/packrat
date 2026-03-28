@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -47,6 +48,9 @@ type Engine struct {
 
 // NewEngine creates a new backup engine.
 func NewEngine(cfg *config.Config, store storage.StorageBackend, stateDB *StateDB) *Engine {
+	if cfg.General.ParallelUploads == 0 {
+		cfg.General.ParallelUploads = 3
+	}
 	return &Engine{
 		cfg:        cfg,
 		storage:    store,
@@ -172,8 +176,16 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup, opts Ba
 		}
 	}
 
+	type pendingUpload struct {
+		path   string
+		hash   string
+		size   int64
+		idx    int
+	}
+
 	var (
 		entries      []FileEntry
+		uploads      []pendingUpload
 		uploadSize   int64
 		changedFiles int
 		addedFiles   int
@@ -209,13 +221,52 @@ func (e *Engine) RunGroup(ctx context.Context, group config.BackupGroup, opts Ba
 		entry.ModTime = modTime
 		entries = append(entries, entry)
 
-		// Upload changed/added blobs
 		if status == "added" || status == "modified" {
-			progress(group.Name, "uploading", i+1, len(files), uploadSize, totalSize)
-			if err := e.uploadBlob(ctx, fi.Path, fi.SHA256, group.Encrypt); err != nil {
-				return nil, fmt.Errorf("uploading blob %s: %w", fi.Path, err)
-			}
+			uploads = append(uploads, pendingUpload{
+				path: fi.Path,
+				hash: fi.SHA256,
+				size: fi.Size,
+				idx:  i,
+			})
 			uploadSize += fi.Size
+		}
+	}
+
+	// Upload changed/added blobs in parallel
+	if len(uploads) > 0 {
+		uploadSem := make(chan struct{}, e.cfg.General.ParallelUploads)
+		uploadErrs := make([]error, len(uploads))
+		var uploadWg sync.WaitGroup
+		var uploaded atomic.Int64
+
+		for i, u := range uploads {
+			if err := ctx.Err(); err != nil {
+				return nil, fmt.Errorf("backup cancelled: %w", err)
+			}
+			uploadWg.Add(1)
+			go func(idx int, up pendingUpload) {
+				defer uploadWg.Done()
+				uploadSem <- struct{}{}
+				defer func() { <-uploadSem }()
+
+				if err := ctx.Err(); err != nil {
+					uploadErrs[idx] = err
+					return
+				}
+				if err := e.uploadBlob(ctx, up.path, up.hash, group.Encrypt); err != nil {
+					uploadErrs[idx] = fmt.Errorf("uploading blob %s: %w", up.path, err)
+					return
+				}
+				done := uploaded.Add(up.size)
+				progress(group.Name, "uploading", int(uploaded.Load()/1024), int(uploadSize/1024), done, uploadSize)
+			}(i, u)
+		}
+		uploadWg.Wait()
+
+		for _, err := range uploadErrs {
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
