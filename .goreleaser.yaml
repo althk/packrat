@@ -24,3 +24,8 @@ checksum:
 
 changelog:
   sort: asc
+
+release:
+  github:
+    owner: althk
+    name: packrat
