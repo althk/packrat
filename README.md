@@ -30,12 +30,25 @@ Packrat is a CLI tool and background daemon that automatically backs up your she
 
 ### Install
 
+#### From GitHub Release
+
+1. Go to the [latest release page](https://github.com/althk/packrat/releases/latest).
+2. Download the archive for your operating system and architecture (e.g., `packrat-linux-amd64.tar.gz`).
+3. Extract the archive and move the `packrat` binary to a directory in your `$PATH`, for example:
+
+   ```bash
+   tar -xzf packrat-linux-amd64.tar.gz
+   sudo mv packrat /usr/local/bin/
+   ```
+
+#### From Source
+
 ```bash
-# From source
-go install github.com/harish/packrat/cmd/packrat@latest
+# Using 'go install'
+go install github.com/althk/packrat/cmd/packrat@latest
 
 # Or build locally
-git clone https://github.com/harish/packrat.git
+git clone https://github.com/althk/packrat.git
 cd packrat
 make build
 sudo cp bin/packrat /usr/local/bin/
